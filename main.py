@@ -6,6 +6,8 @@ import os
 from datetime import datetime, timedelta
 import re
 import asyncio
+import aiohttp
+from jinja2 import Environment, FileSystemLoader
 
 port_scan_binary_path = "E:\\pentest\\RustScan\\target\\release\\rustscan.exe"
 # 正则表达式模式匹配IP地址
@@ -64,6 +66,12 @@ def read_data_from_file(file_path):
         datas = file.read().splitlines()
     return datas
 
+async def fetch_status_code(session,url):
+    try:
+        async with session.get(url,headers={"User-Agent": "Mozilla/5.0"}) as response:
+            return url, response.status
+    except Exception as e:
+        return url, str(e)
 
 def check_and_execute(target, execute_function):
     now = datetime.now()
@@ -176,19 +184,37 @@ async def main():
 
     print("Subdomains found:")
     # 3. Get the domains StateCode
-    
-    # 4. Get unique IPs
-    out_ip_file = generate_filename(target, 'ip')
+    status_codes = {}
 
-    if not check_file_exist(out_ip_file):
-        tasks = [ping_domain(domain) for domain in subdomains]
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_status_code(session, subdomain) for subdomain in subdomains]
         results = await asyncio.gather(*tasks)
-    else:
-        results = read_data_from_file(out_ip_file)
-    check_and_execute(out_ip_file, lambda: analyse_ping_result_to_no_cdn_ip(
-        results, out_ip_file))
 
-    unique_ips = read_data_from_file(out_ip_file)
+        for url, status_code in results:
+            status_codes[url] = status_code
+#     env = Environment(loader=FileSystemLoader('.'))
+#     template = env.get_template('report_template.html')
+
+#     html_content = template.render(status_codes=status_codes)
+#  # 将HTML内容保存到文件
+#     with open('report.html', 'w') as file:
+#         file.write(html_content)
+
+#     print("报告已生成：report.html")
+    # for url, status_code in status_codes.items():
+    #     print(f"{url}: {status_code}")
+    # 4. Get unique IPs
+    # out_ip_file = generate_filename(target, 'ip')
+
+    # if not check_file_exist(out_ip_file):
+    #     tasks = [ping_domain(domain) for domain in subdomains]
+    #     results = await asyncio.gather(*tasks)
+    # else:
+    #     results = read_data_from_file(out_ip_file)
+    # check_and_execute(out_ip_file, lambda: analyse_ping_result_to_no_cdn_ip(
+    #     results, out_ip_file))
+
+    # unique_ips = read_data_from_file(out_ip_file)
     #target_ips = ",".join(unique_ips)
 
     # out_port_file = generate_filename(target, 'port')

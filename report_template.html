@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>URL Status Report</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>URL Status Report</h1>
+    <table>
+        <tr>
+            <th>URL</th>
+            <th>Status Code</th>
+        </tr>
+        {% for url, status_code in status_codes.items() %}
+        <tr>
+            <td>{{ url }}</td>
+            <td>{{ status_code }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
