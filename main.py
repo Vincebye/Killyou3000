@@ -8,11 +8,15 @@ import re
 import asyncio
 import aiohttp
 from jinja2 import Environment, FileSystemLoader
-
+import requests
 port_scan_binary_path = "E:\\pentest\\RustScan\\target\\release\\rustscan.exe"
 # 正则表达式模式匹配IP地址
 ip_pattern = r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"
 cdn_keywords = ['cloudflare','akamai','fastly','ali','tencent'] 
+def process_domain(domain):
+    if not domain.startswith('http://') and not domain.startswith('https://'):
+        domain = 'http://' + domain
+    return domain
 
 def generate_filename(target, ftype):
     now = datetime.now()
@@ -67,12 +71,18 @@ def read_data_from_file(file_path):
     return datas
 
 async def fetch_status_code(session,url):
+    url=process_domain(url)
     try:
-        async with session.get(url,headers={"User-Agent": "Mozilla/5.0"}) as response:
+        async with session.get(url,headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"}) as response:
             return url, response.status
     except Exception as e:
         return url, str(e)
-
+# def fetch_status_code(url):
+#     try:
+#         response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+#         return url, response.status_code
+#     except requests.RequestException as e:
+#         return url, str(e)
 def check_and_execute(target, execute_function):
     now = datetime.now()
 
@@ -192,17 +202,21 @@ async def main():
 
         for url, status_code in results:
             status_codes[url] = status_code
-#     env = Environment(loader=FileSystemLoader('.'))
-#     template = env.get_template('report_template.html')
+    # for url in subdomains:
+    #     url, status_code = fetch_status_code(url)
+    #     status_codes[url] = status_code
 
-#     html_content = template.render(status_codes=status_codes)
-#  # 将HTML内容保存到文件
-#     with open('report.html', 'w') as file:
-#         file.write(html_content)
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template('report_template.html')
 
-#     print("报告已生成：report.html")
-    # for url, status_code in status_codes.items():
-    #     print(f"{url}: {status_code}")
+    html_content = template.render(status_codes=status_codes)
+ # 将HTML内容保存到文件
+    with open('report.html', 'w') as file:
+        file.write(html_content)
+
+    print("报告已生成：report.html")
+    for url, status_code in status_codes.items():
+        print(f"{url}: {status_code}")
     # 4. Get unique IPs
     # out_ip_file = generate_filename(target, 'ip')
 
