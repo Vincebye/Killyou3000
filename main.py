@@ -1,5 +1,5 @@
 import argparse
-from urllib.parse import urlparse
+
 import subprocess
 import socket
 import os
@@ -8,6 +8,8 @@ import re
 import asyncio
 import aiohttp
 from jinja2 import Environment, FileSystemLoader
+
+from scanners.subdomain_scaner import Subdomain
 import requests
 port_scan_binary_path = "E:\\pentest\\RustScan\\target\\release\\rustscan.exe"
 # 正则表达式模式匹配IP地址
@@ -17,27 +19,6 @@ def process_domain(domain):
     if not domain.startswith('http://') and not domain.startswith('https://'):
         domain = 'http://' + domain
     return domain
-
-def generate_filename(target, ftype):
-    now = datetime.now()
-    year = now.year
-    month = now.month
-    filename = f"{target}_{ftype}_{year}_{month:02d}.txt"
-    return filename
-
-
-def parse_target_from_url(url):
-    parsed_url = urlparse(url)
-    target = parsed_url.netloc
-    if target.startswith("www."):
-        target = target[4:]  # 去除前面的 "www."
-    return target
-
-
-def run_subfinder(target, output_file):
-    command = ["subfinder", "-d", target, "-o", output_file]
-    subprocess.run(command, capture_output=True, shell=True)
-
 
 def run_rustscan(target,output_file):
     command = [port_scan_binary_path, "-a", target, "--scan-order", "Random"]
@@ -65,10 +46,7 @@ def run_rustscan_onebyone(targets,output_file):
     return output
 
 
-def read_data_from_file(file_path):
-    with open(file_path, "r") as file:
-        datas = file.read().splitlines()
-    return datas
+
 
 async def fetch_status_code(session,url):
     url=process_domain(url)
@@ -77,36 +55,8 @@ async def fetch_status_code(session,url):
             return url, response.status
     except Exception as e:
         return url, str(e)
-# def fetch_status_code(url):
-#     try:
-#         response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
-#         return url, response.status_code
-#     except requests.RequestException as e:
-#         return url, str(e)
-def check_and_execute(target, execute_function):
-    now = datetime.now()
 
-    files_with_target_prefix = [
-        filename for filename in os.listdir() if filename.startswith(target)]
 
-    if files_with_target_prefix:
-        for filename in files_with_target_prefix:
-            if filename.endswith(".txt"):
-                year_month = filename[:-4].split("_")[2:4]
-                print(year_month)
-                file_creation_time = datetime.strptime(
-                    year_month[0]+'_'+year_month[1], "%Y_%m")
-                time_difference = now - file_creation_time
-
-                if time_difference <= timedelta(days=30):
-                    print(f"File '{filename}' is recent. Skipping function A.")
-                else:
-                    print(
-                        f"File '{filename}' is older. Deleting and executing function A.")
-                    os.remove(filename)
-                    execute_function()
-    else:
-        execute_function()
 
 def check_file_exist(file_path):
     if os.path.exists(file_path):
@@ -182,41 +132,31 @@ async def main():
 
     args = parser.parse_args()
     url = args.url
-
-    target = parse_target_from_url(url)
-    print("Extracted target:", target)
-
-    # 2. Check need to run_sunfinder
-    output_file = generate_filename(target, 'subdomain')
-    check_and_execute(output_file, lambda: run_subfinder(target, output_file))
-
-    subdomains = read_data_from_file(output_file)
-
-    print("Subdomains found:")
+    Subdomain().run(url)
     # 3. Get the domains StateCode
-    status_codes = {}
+#     status_codes = {}
 
-    async with aiohttp.ClientSession() as session:
-        tasks = [fetch_status_code(session, subdomain) for subdomain in subdomains]
-        results = await asyncio.gather(*tasks)
+#     async with aiohttp.ClientSession() as session:
+#         tasks = [fetch_status_code(session, subdomain) for subdomain in subdomains]
+#         results = await asyncio.gather(*tasks)
 
-        for url, status_code in results:
-            status_codes[url] = status_code
-    # for url in subdomains:
-    #     url, status_code = fetch_status_code(url)
-    #     status_codes[url] = status_code
+#         for url, status_code in results:
+#             status_codes[url] = status_code
+#     # for url in subdomains:
+#     #     url, status_code = fetch_status_code(url)
+#     #     status_codes[url] = status_code
 
-    env = Environment(loader=FileSystemLoader('.'))
-    template = env.get_template('report_template.html')
+#     env = Environment(loader=FileSystemLoader('.'))
+#     template = env.get_template('report_template.html')
 
-    html_content = template.render(status_codes=status_codes)
- # 将HTML内容保存到文件
-    with open('report.html', 'w') as file:
-        file.write(html_content)
+#     html_content = template.render(status_codes=status_codes)
+#  # 将HTML内容保存到文件
+#     with open('report.html', 'w') as file:
+#         file.write(html_content)
 
-    print("报告已生成：report.html")
-    for url, status_code in status_codes.items():
-        print(f"{url}: {status_code}")
+#     print("报告已生成：report.html")
+#     for url, status_code in status_codes.items():
+#         print(f"{url}: {status_code}")
     # 4. Get unique IPs
     # out_ip_file = generate_filename(target, 'ip')
 
