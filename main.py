@@ -5,11 +5,12 @@ import socket
 import os
 from datetime import datetime, timedelta
 import re
+import asyncio
 
 port_scan_binary_path = "E:\\pentest\\RustScan\\target\\release\\rustscan.exe"
 # 正则表达式模式匹配IP地址
 ip_pattern = r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"
-
+cdn_keywords = ['cloudflare','akamai','fastly','ali','tencent'] 
 
 def generate_filename(target, ftype):
     now = datetime.now()
@@ -32,12 +33,29 @@ def run_subfinder(target, output_file):
     subprocess.run(command, capture_output=True, shell=True)
 
 
-def run_rustscan(target):
+def run_rustscan(target,output_file):
     command = [port_scan_binary_path, "-a", target, "--scan-order", "Random"]
     result = subprocess.run(
         command, capture_output=True, text=True, shell=True)
     output = result.stdout.strip().split("\n")
+    write_to_file(output,output_file,'w')
     print(output)
+    return output
+
+def run_rustscan_onebyone(targets,output_file):
+    for target in targets:
+        command = [port_scan_binary_path, "-a", target, "--scan-order", "Random"]
+        result = subprocess.run(
+            command, capture_output=True, text=True, shell=True)
+        if result.returncode != 0:
+            print(f"Failed to run rustscan for target {target}: {result.stderr}")
+            continue
+        if result.stdout is None or result.stdout == "":
+            print(f"Failed to run rustscan for target {target}: no output")
+            continue
+        output = result.stdout.strip().split("\n")
+        write_to_file(output,output_file,'w')
+        print(output)
     return output
 
 
@@ -81,52 +99,46 @@ def write_to_file(datas, file_path,mode='w'):
     with open(file_path, mode) as file:
         for ip in datas:
             file.write(ip + "\n")
+def extract_ip(data):
+    ip_addresses = re.findall(ip_pattern, data.lower())
+    unique_ip_addresses = list(set(ip_addresses))
+    return unique_ip_addresses
 
-def get_check_cdn_ping_to_ip(domain_list, file_path):
-    result=[]
+def analyse_ping_result_to_no_cdn_ip(ping_result,out_file_path):
+    ip_list = []
+
     cdns=[]
-    failed=[]
-    cdn_keywords = ['cloudflare','akamai','fastly','ali','tencent']  # 要检查的关键词
-
-    cdn_file=file_path.replace('ip','cdn')
-    filed_file=file_path.replace('ip','failed')
-    if check_file_exist(cdn_file):
-        cdns=read_data_from_file(cdn_file)
-    if check_file_exist(filed_file):
-        failed=read_data_from_file(filed_file)
-    else:
-        for domain in domain_list:
-            if len(cdns)%10==0:
-                cdns=list(set(cdns))
-                write_to_file(cdns,cdn_file)
-            if len(failed)%10==0:
-                failed=list(set(failed))
-                write_to_file(failed,filed_file)
-            if domain not in cdns and domain not in failed:
-                try:
-                    ping_output = subprocess.check_output(["ping", domain], universal_newlines=True)
-                    flag=False
-                    for cdn_keyword in cdn_keywords:
-                        if cdn_keyword in ping_output.lower():
-                            flag=True
-                            print(f"Domain {domain} may be associated with a CDN.")
-                            cdns.append(domain)
-                            break
-                    if not flag:
-                        ip_addresses = re.findall(ip_pattern, ping_output.lower())
-                        unique_ip_addresses = list(set(ip_addresses))
-                        result.extend(unique_ip_addresses)
-                        print(f"Domain {domain} doesn't seem to be associated with a CDN.")
-                except subprocess.CalledProcessError:
-                    failed.append(domain)
-                    print(f"Failed to ping domain {domain}.")
+    cdn_file_path = out_file_path.replace('ip','cdn')
+    for line in ping_result:
+        ips=[]
+        ips=extract_ip(line)
+        flag=False
+        for cdn_keyword in cdn_keywords:
+            if cdn_keyword in line.lower():
+                flag=True
+                cdns.extend(ips)
+                break
+        if '超时' in line:
+            flag=True
+        if not flag:
+            ip_list.extend(ips)
     cdns=list(set(cdns))
-    failed=list(set(failed))
-    write_to_file(cdns,cdn_file)
-    write_to_file(failed,filed_file)
-    write_to_file(result, file_path)
-    return result
+    ips=list(set(ip_list))    
+    write_to_file(cdns,cdn_file_path)
+    write_to_file(ips,out_file_path)
+    return ip_list
 
+async def ping_domain(domain):
+    try:
+        ping_output = await asyncio.create_subprocess_shell(f"ping {domain}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await ping_output.communicate()
+        return stdout.decode('gbk', errors='replace')
+    except asyncio.CancelledError:
+        ping_output.kill()
+        await ping_output.communicate()
+        raise
+    except Exception as e:
+        return f"Failed to ping domain {domain}: {e}"
 #Giveup
 def get_unique_ips(domain_list, file_path):
     ip_set = set()
@@ -143,7 +155,7 @@ def get_unique_ips(domain_list, file_path):
     return unique_ips
 
 
-def main():
+async def main():
     # 1. Parse arguments
     parser = argparse.ArgumentParser(
         description="Parse URL and extract target")
@@ -163,18 +175,26 @@ def main():
     subdomains = read_data_from_file(output_file)
 
     print("Subdomains found:")
-    # 3. Get unique IPs
+    # 3. Get the domains StateCode
+    
+    # 4. Get unique IPs
     out_ip_file = generate_filename(target, 'ip')
-    check_and_execute(out_ip_file, lambda: get_check_cdn_ping_to_ip(
-        subdomains, out_ip_file))
-    unique_ips = read_data_from_file(out_ip_file)
-    # unique_ips = get_unique_ips(subdomains)
 
-    write_to_file(unique_ips, out_ip_file)
-    target_ips = ",".join(unique_ips)
-    check_and_execute(out_ip_file, lambda: run_rustscan(target_ips))
-    # run_rustscan(target_ips)
+    if not check_file_exist(out_ip_file):
+        tasks = [ping_domain(domain) for domain in subdomains]
+        results = await asyncio.gather(*tasks)
+    else:
+        results = read_data_from_file(out_ip_file)
+    check_and_execute(out_ip_file, lambda: analyse_ping_result_to_no_cdn_ip(
+        results, out_ip_file))
+
+    unique_ips = read_data_from_file(out_ip_file)
+    #target_ips = ",".join(unique_ips)
+
+    # out_port_file = generate_filename(target, 'port')
+
+    # check_and_execute(out_port_file, lambda: run_rustscan_onebyone(unique_ips,out_port_file))
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
