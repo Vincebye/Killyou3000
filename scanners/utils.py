@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import os
+import glob
 def read_data_from_file(file_path):
     with open(file_path, "r") as file:
         datas = file.read().splitlines()
@@ -43,3 +44,5 @@ def parse_target_from_url(url):
     if target.startswith("www."):
         target = target[4:]  # 去除前面的 "www."
     return target
+
+        

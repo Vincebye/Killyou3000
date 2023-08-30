@@ -24,17 +24,18 @@ def send_email(sender_email, sender_password, recipient_email, subject, message)
     with smtplib.SMTP_SSL('smtp.qq.com', 465) as server:
         server.login(sender_email, sender_password)
         server.send_message(msg)
-config.read("config.ini")
-token=config.get('telegram','bot_token')
-chatid=config.get('telegram','chat_id')
 
-sender_email = config.get('mail', 'sender_email')
-sender_password = config.get('mail', 'sender_password')
-receive_email = config.get('mail', 'receive_email')
+# config.read("config.ini")
+# token=config.get('telegram','bot_token')
+# chatid=config.get('telegram','chat_id')
 
-subject = 'Test Email'
+# sender_email = config.get('mail', 'sender_email')
+# sender_password = config.get('mail', 'sender_password')
+# receive_email = config.get('mail', 'receive_email')
 
-message = 'Good Night!'
-send_email(sender_email, sender_password, receive_email, subject, message)
+# subject = 'Test Email'
+
+# message = 'Good Night!'
+# send_email(sender_email, sender_password, receive_email, subject, message)
 
 #asyncio.run(send_telegram_notification(token, chatid, message))

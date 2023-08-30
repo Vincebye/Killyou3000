@@ -132,7 +132,9 @@ async def main():
 
     args = parser.parse_args()
     url = args.url
-    Subdomain().run(url)
+    #Subdomain().run(url)
+    sub=Subdomain()
+    sub.monitor(url)
     # 3. Get the domains StateCode
 #     status_codes = {}
 
